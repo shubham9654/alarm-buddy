@@ -37,6 +37,11 @@ export function RiddleTask({ difficulty, onComplete, isDark }: RiddleTaskProps) 
   const generateRiddle = () => {
     const riddles = getRiddlesByDifficulty(difficulty);
     const selectedRiddle = riddles[Math.floor(Math.random() * riddles.length)];
+    
+    if (!selectedRiddle) {
+      return;
+    }
+    
     const useMultipleChoice = Math.random() > 0.6;
     
     if (useMultipleChoice) {
@@ -207,14 +212,16 @@ export function RiddleTask({ difficulty, onComplete, isDark }: RiddleTaskProps) 
     while (options.length < 4 && otherAnswers.length > 0) {
       const randomIndex = Math.floor(Math.random() * otherAnswers.length);
       const option = otherAnswers.splice(randomIndex, 1)[0];
-      options.push(option);
+      if (option) {
+        options.push(option);
+      }
     }
     
     // If we don't have enough options, add some generic ones
     const genericOptions = ['water', 'air', 'light', 'shadow', 'mirror', 'door', 'window', 'book'];
     while (options.length < 4) {
       const option = genericOptions[Math.floor(Math.random() * genericOptions.length)];
-      if (!options.includes(option)) {
+      if (option && !options.includes(option)) {
         options.push(option);
       }
     }

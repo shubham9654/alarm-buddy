@@ -1,12 +1,13 @@
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAlarmStore } from '../../state/alarmStore';
 import { useSettingsStore } from '../../state/settingsStore';
 import { useTheme } from '../../providers/ThemeProvider';
 import { useNotifications } from '../../providers/NotificationsProvider';
-import { formatTime, getTimeUntilAlarm } from '../../lib/time';
+import { formatTime, getNextAlarmTime, getTimeUntilAlarm } from '../../lib/time';
 import { getRepeatText } from '../../models/alarm';
 
 export default function HomeScreen() {
@@ -40,15 +41,23 @@ export default function HomeScreen() {
   const totalAlarms = alarms.length;
 
   return (
-    <ScrollView 
-      className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
-      contentContainerStyle={{ padding: 16 }}
-    >
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <ScrollView 
+        className="flex-1"
+        contentContainerStyle={{ padding: 16 }}
+      >
       {/* Header */}
       <View className="mb-6">
-        <Text className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-          Good {getGreeting()}
-        </Text>
+        <View className="flex-row items-center justify-between mb-2">
+          <Text className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Good {getGreeting()}
+          </Text>
+          <Link href="/alarm/new" asChild>
+            <TouchableOpacity className={`${isDark ? 'bg-blue-600' : 'bg-blue-500'} rounded-full p-2`}>
+              <Ionicons name="add" size={24} color="white" />
+            </TouchableOpacity>
+          </Link>
+        </View>
         <Text className={`text-lg ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
           {getWelcomeMessage(totalAlarms, enabledAlarms.length)}
         </Text>
@@ -95,29 +104,34 @@ export default function HomeScreen() {
         </View>
         
         {nextAlarm ? (
-          <View>
-            <Text className={`text-4xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'} mb-2`}>
-              {formatTime(nextAlarm.time)}
-            </Text>
-            <Text className={`text-lg ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2`}>
-              {nextAlarm.label || 'Alarm'}
-            </Text>
-            <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-3`}>
-              {getRepeatText(nextAlarm.repeat)} • {getTimeUntilAlarm(nextAlarm)}
-            </Text>
-            {nextAlarm.taskType !== 'none' && (
-              <View className="flex-row items-center">
-                <Ionicons 
-                  name="puzzle" 
-                  size={16} 
-                  color={isDark ? '#9CA3AF' : '#6B7280'} 
-                />
-                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} ml-2`}>
-                  {nextAlarm.taskType} task ({nextAlarm.taskDifficulty})
-                </Text>
-              </View>
-            )}
-          </View>
+          <Link href={`/alarm/${nextAlarm.id}`} asChild>
+            <TouchableOpacity>
+              <Text className={`text-4xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'} mb-2`}>
+                {formatTime(nextAlarm.time)}
+              </Text>
+              <Text className={`text-lg ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2`}>
+                {nextAlarm.label || 'Alarm'}
+              </Text>
+              <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-3`}>
+                {getRepeatText(nextAlarm.repeat)} • {(() => {
+                  const nextTime = getNextAlarmTime(nextAlarm);
+                  return nextTime ? getTimeUntilAlarm(nextTime) : 'Unknown';
+                })()}
+              </Text>
+              {nextAlarm.taskType !== 'none' && (
+                <View className="flex-row items-center">
+                  <Ionicons 
+                    name="extension-puzzle" 
+                    size={16} 
+                    color={isDark ? '#9CA3AF' : '#6B7280'} 
+                  />
+                  <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} ml-2`}>
+                    {nextAlarm.taskType} task ({nextAlarm.taskDifficulty})
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </Link>
         ) : (
           <View className="items-center py-8">
             <Ionicons 
@@ -174,34 +188,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Quick Actions */}
-      <View className="mb-6">
-        <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-          Quick Actions
-        </Text>
-        
-        <View className="flex-row">
-          <Link href="/alarms" asChild>
-            <TouchableOpacity className={`flex-1 ${isDark ? 'bg-blue-600' : 'bg-blue-500'} rounded-xl p-4 mr-3 flex-row items-center justify-center`}>
-              <Ionicons name="add" size={20} color="white" />
-              <Text className="text-white font-semibold ml-2">New Alarm</Text>
-            </TouchableOpacity>
-          </Link>
-          
-          <Link href="/settings" asChild>
-            <TouchableOpacity className={`flex-1 ${isDark ? 'bg-gray-700' : 'bg-gray-200'} rounded-xl p-4 ml-3 flex-row items-center justify-center`}>
-              <Ionicons 
-                name="settings" 
-                size={20} 
-                color={isDark ? '#D1D5DB' : '#374151'} 
-              />
-              <Text className={`${isDark ? 'text-gray-200' : 'text-gray-700'} font-semibold ml-2`}>
-                Settings
-              </Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      </View>
+
 
       {/* Recent Alarms */}
       {enabledAlarms.length > 0 && (
@@ -211,22 +198,23 @@ export default function HomeScreen() {
           </Text>
           
           {enabledAlarms.slice(0, 3).map((alarm) => (
-            <View 
-              key={alarm.id}
-              className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-4 mb-3 shadow-sm`}
-            >
-              <View className="flex-row items-center justify-between">
-                <View className="flex-1">
-                  <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {formatTime(alarm.time)}
-                  </Text>
-                  <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {alarm.label || 'Alarm'} • {getRepeatText(alarm.repeat)}
-                  </Text>
+            <Link key={alarm.id} href={`/alarm/${alarm.id}`} asChild>
+              <TouchableOpacity 
+                className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-4 mb-3 shadow-sm`}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {formatTime(alarm.time)}
+                    </Text>
+                    <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {alarm.label || 'Alarm'} • {getRepeatText(alarm.repeat)}
+                    </Text>
+                  </View>
+                  <View className={`w-3 h-3 rounded-full ${alarm.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
                 </View>
-                <View className={`w-3 h-3 rounded-full ${alarm.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
-              </View>
-            </View>
+              </TouchableOpacity>
+            </Link>
           ))}
           
           {enabledAlarms.length > 3 && (
@@ -240,8 +228,19 @@ export default function HomeScreen() {
           )}
         </View>
       )}
-    </ScrollView>
-  );
+      </ScrollView>
+      
+      {/* Floating Action Button */}
+      <Link href="/alarm/new" asChild>
+        <TouchableOpacity 
+          className={`absolute bottom-6 right-6 ${isDark ? 'bg-blue-600' : 'bg-blue-500'} rounded-full p-4 shadow-lg`}
+          style={{ elevation: 8 }}
+        >
+          <Ionicons name="add" size={28} color="white" />
+        </TouchableOpacity>
+      </Link>
+     </SafeAreaView>
+   );
 }
 
 function getGreeting(): string {

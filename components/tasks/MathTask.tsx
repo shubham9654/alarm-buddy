@@ -203,7 +203,11 @@ export function MathTask({ difficulty, onComplete, isDark }: MathTaskProps) {
         setShowHint(true);
       }
       
-      onComplete({ completed: false, answer });
+      const result: TaskResult = { completed: false };
+      if (answer !== null) {
+        result.answer = answer;
+      }
+      onComplete(result);
     }
   };
 

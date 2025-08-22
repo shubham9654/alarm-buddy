@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Alarm } from '../../models/alarm';
 import { useTheme } from '../../providers/ThemeProvider';
-import { getRepeatText, getTimeUntilAlarm } from '../../lib/time';
+import { getRepeatText, getTimeUntilAlarm, getNextAlarmTime } from '../../lib/time';
 
 interface AlarmCardProps {
   alarm: Alarm;
@@ -41,14 +41,20 @@ export function AlarmCard({ alarm, onToggle, onEdit, onDelete, showDetails = fal
   };
 
   const formatTime = (time: string): string => {
-    const [hours, minutes] = time.split(':');
+    const timeParts = time.split(':');
+    const hours = timeParts[0];
+    const minutes = timeParts[1];
+    if (!hours || !minutes) {
+      return '12:00 AM';
+    }
     const hour = parseInt(hours);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
-  const timeUntil = alarm.enabled ? getTimeUntilAlarm(alarm.time, alarm.repeat) : null;
+  const nextAlarmTime = alarm.enabled ? getNextAlarmTime(alarm) : null;
+  const timeUntil = nextAlarmTime ? getTimeUntilAlarm(nextAlarmTime) : null;
 
   return (
     <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl p-4 mb-3 shadow-sm border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>

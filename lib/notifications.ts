@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Alarm } from '../models/alarm';
 import { getNextAlarmTime, getUpcomingAlarmTimes, getNotificationId } from './time';
+import { SchedulableTriggerInputTypes } from 'expo-notifications';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -9,6 +10,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -79,12 +82,14 @@ class NotificationService {
             priority: Notifications.AndroidNotificationPriority.MAX,
             sticky: true,
             data: {
+              type: 'alarm',
               alarmId: alarm.id,
               taskType: alarm.taskType,
               taskDifficulty: alarm.taskDifficulty,
             },
           },
           trigger: {
+            type: SchedulableTriggerInputTypes.DATE,
             date: alarmTime,
           },
         });
@@ -141,6 +146,7 @@ class NotificationService {
           },
         },
         trigger: {
+          type: SchedulableTriggerInputTypes.DATE,
           date: snoozeTime,
         },
       });
@@ -184,7 +190,7 @@ class NotificationService {
       // Cancel notifications for alarms that no longer exist or are disabled
       const notificationsToCancel = scheduledNotifications.filter(notification => {
         const alarmId = notification.identifier.split('-')[0];
-        return !enabledAlarmIds.includes(alarmId);
+        return alarmId && !enabledAlarmIds.includes(alarmId);
       });
       
       for (const notification of notificationsToCancel) {

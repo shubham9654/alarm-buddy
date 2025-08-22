@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, Slider } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../../state/settingsStore';
 import { useTheme } from '../../providers/ThemeProvider';
@@ -38,7 +39,8 @@ export default function SettingsScreen() {
   };
 
   const handleSnoozeMinutesChange = (minutes: number) => {
-    updateSnoozeSettings(settings.snoozeEnabled, minutes);
+    const validMinutes = minutes as 5 | 10 | 15;
+    updateSnoozeSettings(settings.snoozeEnabled, validMinutes);
   };
 
   const handleSoundToggle = (enabled: boolean) => {
@@ -46,60 +48,63 @@ export default function SettingsScreen() {
   };
 
   const handleVolumeChange = (volume: number) => {
-    updateSoundSettings(settings.soundEnabled, volume);
+    updateSoundSettings(settings.soundEnabled, volume, settings.soundName);
+  };
+
+  const handleSoundChange = (soundName: string) => {
+    updateSoundSettings(settings.soundEnabled, settings.defaultVolume, soundName as Settings['soundName']);
   };
 
   const handleVibrationToggle = (enabled: boolean) => {
     updateVibrationSettings(enabled);
   };
 
+  const handleVibrationPatternChange = (pattern: Settings['vibrationPattern']) => {
+    updateVibrationSettings(settings.vibrationEnabled, pattern);
+  };
+
   const handleTestSound = async () => {
     if (testingSound) return;
     
+    setTestingSound(true);
     try {
-      setTestingSound(true);
-      await soundService.testSound('default', settings.defaultVolume);
+      await soundService.testSound(settings.soundName, settings.defaultVolume);
     } catch (error) {
-      Alert.alert('Error', 'Failed to test sound');
+      console.error('Error testing sound:', error);
     } finally {
       setTimeout(() => setTestingSound(false), 3000);
+    }
+  };
+
+  const handleNotificationPermission = async () => {
+    if (!hasPermission) {
+      const granted = await requestPermission();
+      if (!granted) {
+        Alert.alert(
+          'Permission Required',
+          'Notifications are required for alarms to work properly. Please enable them in your device settings.',
+          [{ text: 'OK' }]
+        );
+      }
     }
   };
 
   const handleResetSettings = () => {
     Alert.alert(
       'Reset Settings',
-      'Are you sure you want to reset all settings to their default values?',
+      'Are you sure you want to reset all settings to default values?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
+        { 
+          text: 'Reset', 
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await resetSettings();
-              Alert.alert('Success', 'Settings have been reset to defaults');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to reset settings');
-            }
-          },
-        },
+          onPress: () => resetSettings()
+        }
       ]
     );
   };
 
-  const handleRequestNotificationPermission = async () => {
-    const granted = await requestPermission();
-    if (!granted) {
-      Alert.alert(
-        'Permission Required',
-        'Please enable notifications in your device settings for alarms to work properly.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  const getThemeDisplayName = (theme: Settings['theme']) => {
+  const getThemeDisplayName = (theme: string) => {
     switch (theme) {
       case 'light': return 'Light';
       case 'dark': return 'Dark';
@@ -109,320 +114,468 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      {/* Header */}
-      <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 py-6 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-          Settings
-        </Text>
-        <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-          Customize your alarm experience
-        </Text>
-      </View>
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <ScrollView className="flex-1">
+        {/* Header */}
+        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+          <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
+            Settings
+          </Text>
+          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            Customize your alarm experience
+          </Text>
+        </View>
 
-      <View className="p-4">
-        {/* Notifications Section */}
-        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
-          <View className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Notifications
-            </Text>
+        <View className="p-4">
+          {/* Notifications Section */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Notifications
+              </Text>
+            </View>
+            
+            <View className="p-4">
+              <TouchableOpacity 
+                onPress={handleNotificationPermission}
+                className="flex-row items-center justify-between py-3"
+              >
+                <View className="flex-row items-center flex-1">
+                  <Ionicons 
+                    name={hasPermission ? "notifications" : "notifications-off"} 
+                    size={20} 
+                    color={hasPermission ? (isDark ? "#10b981" : "#059669") : (isDark ? "#ef4444" : "#dc2626")} 
+                  />
+                  <View className="ml-3 flex-1">
+                    <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Notification Permission
+                    </Text>
+                    <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {hasPermission ? 'Enabled' : 'Tap to enable'}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={20} 
+                  color={isDark ? "#6b7280" : "#9ca3af"} 
+                />
+              </TouchableOpacity>
+            </View>
           </View>
-          
-          <View className="p-4">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Notification Permission
-                </Text>
-                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                  {hasPermission ? 'Enabled' : 'Required for alarms to work'}
-                </Text>
+
+          {/* Sound Settings */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Sound
+              </Text>
+            </View>
+            
+            <View className="p-4 space-y-4">
+              <View className="flex-row items-center justify-between py-2">
+                <View className="flex-1">
+                  <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Enable Sound
+                  </Text>
+                  <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Play sound when alarm goes off
+                  </Text>
+                </View>
+                <Switch
+                  value={settings.soundEnabled}
+                  onValueChange={handleSoundToggle}
+                  trackColor={{ false: isDark ? '#374151' : '#f3f4f6', true: '#10b981' }}
+                  thumbColor={settings.soundEnabled ? '#ffffff' : '#9ca3af'}
+                />
               </View>
-              
-              {!hasPermission ? (
-                <TouchableOpacity
-                  onPress={handleRequestNotificationPermission}
-                  className="bg-blue-600 rounded-lg px-4 py-2"
-                >
-                  <Text className="text-white font-medium">Enable</Text>
-                </TouchableOpacity>
-              ) : (
-                <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+
+              {settings.soundEnabled && (
+                <>
+                  <View className="py-2">
+                    <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
+                      Alarm Sound
+                    </Text>
+                    <View className="space-y-2">
+                      {['default', 'gentle', 'nature', 'electronic'].map((sound) => (
+                        <TouchableOpacity
+                          key={sound}
+                          onPress={() => handleSoundChange(sound)}
+                          className={`flex-row items-center justify-between p-3 rounded-lg mb-2 ${
+                            settings.soundName === sound 
+                              ? (isDark ? 'bg-blue-900/30 border border-blue-500' : 'bg-blue-50 border border-blue-200')
+                              : (isDark ? 'bg-gray-700' : 'bg-gray-50')
+                          }`}
+                        >
+                          <Text className={`capitalize ${
+                            settings.soundName === sound 
+                              ? (isDark ? 'text-blue-400' : 'text-blue-600')
+                              : (isDark ? 'text-gray-300' : 'text-gray-700')
+                          }`}>
+                            {sound}
+                          </Text>
+                          {settings.soundName === sound && (
+                            <Ionicons 
+                              name="checkmark-circle" 
+                              size={20} 
+                              color={isDark ? "#60a5fa" : "#3b82f6"} 
+                            />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View className="py-2">
+                    <View className="flex-row items-center justify-between mb-3">
+                      <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        Volume: {Math.round(settings.defaultVolume * 100)}%
+                      </Text>
+                      <TouchableOpacity
+                        onPress={handleTestSound}
+                        disabled={testingSound}
+                        className={`px-3 py-1 rounded-lg ${
+                          testingSound 
+                            ? (isDark ? 'bg-gray-700' : 'bg-gray-200')
+                            : (isDark ? 'bg-blue-600' : 'bg-blue-500')
+                        }`}
+                      >
+                        <Text className={`text-sm ${
+                          testingSound 
+                            ? (isDark ? 'text-gray-400' : 'text-gray-500')
+                            : 'text-white'
+                        }`}>
+                          {testingSound ? 'Playing...' : 'Test'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View className={`h-2 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                      <View 
+                        className="h-full bg-blue-500 rounded-full" 
+                        style={{ width: `${settings.defaultVolume * 100}%` }}
+                      />
+                    </View>
+                    <View className="flex-row justify-between mt-2">
+                      {[0.2, 0.4, 0.6, 0.8, 1.0].map((vol) => (
+                        <TouchableOpacity
+                          key={vol}
+                          onPress={() => handleVolumeChange(vol)}
+                          className={`w-8 h-8 rounded-full items-center justify-center ${
+                            Math.abs(settings.defaultVolume - vol) < 0.01
+                              ? (isDark ? 'bg-blue-600' : 'bg-blue-500')
+                              : (isDark ? 'bg-gray-700' : 'bg-gray-200')
+                          }`}
+                        >
+                          <Text className={`text-xs ${
+                            Math.abs(settings.defaultVolume - vol) < 0.01
+                              ? 'text-white'
+                              : (isDark ? 'text-gray-400' : 'text-gray-600')
+                          }`}>
+                            {Math.round(vol * 100)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
               )}
             </View>
           </View>
-        </View>
 
-        {/* Appearance Section */}
-        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
-          <View className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Appearance
-            </Text>
-          </View>
-          
-          <View className="p-4">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Theme
-                </Text>
-                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                  Current: {getThemeDisplayName(settings.theme)}
-                </Text>
+          {/* Vibration Settings */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Vibration
+              </Text>
+            </View>
+            
+            <View className="p-4 space-y-4">
+              <View className="flex-row items-center justify-between py-2">
+                <View className="flex-1">
+                  <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Enable Vibration
+                  </Text>
+                  <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Vibrate when alarm goes off
+                  </Text>
+                </View>
+                <Switch
+                  value={settings.vibrationEnabled}
+                  onValueChange={handleVibrationToggle}
+                  trackColor={{ false: isDark ? '#374151' : '#f3f4f6', true: '#10b981' }}
+                  thumbColor={settings.vibrationEnabled ? '#ffffff' : '#9ca3af'}
+                />
               </View>
-              
-              <TouchableOpacity
+
+              {settings.vibrationEnabled && (
+                <View className="py-2">
+                  <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
+                    Vibration Pattern
+                  </Text>
+                  <View className="space-y-2">
+                    {[
+                      { key: 'short', label: 'Short', description: 'Quick vibration' },
+                      { key: 'long', label: 'Long', description: 'Extended vibration' },
+                      { key: 'pattern', label: 'Pattern', description: 'Rhythmic vibration' }
+                    ].map((pattern) => (
+                      <TouchableOpacity
+                        key={pattern.key}
+                        onPress={() => handleVibrationPatternChange(pattern.key as Settings['vibrationPattern'])}
+                        className={`flex-row items-center justify-between p-3 rounded-lg mb-2 ${
+                          settings.vibrationPattern === pattern.key 
+                            ? (isDark ? 'bg-blue-900/30 border border-blue-500' : 'bg-blue-50 border border-blue-200')
+                            : (isDark ? 'bg-gray-700' : 'bg-gray-50')
+                        }`}
+                      >
+                        <View>
+                          <Text className={`font-medium ${
+                            settings.vibrationPattern === pattern.key 
+                              ? (isDark ? 'text-blue-400' : 'text-blue-600')
+                              : (isDark ? 'text-gray-300' : 'text-gray-700')
+                          }`}>
+                            {pattern.label}
+                          </Text>
+                          <Text className={`text-sm ${
+                            settings.vibrationPattern === pattern.key 
+                              ? (isDark ? 'text-blue-300' : 'text-blue-500')
+                              : (isDark ? 'text-gray-400' : 'text-gray-500')
+                          }`}>
+                            {pattern.description}
+                          </Text>
+                        </View>
+                        {settings.vibrationPattern === pattern.key && (
+                          <Ionicons 
+                            name="checkmark-circle" 
+                            size={20} 
+                            color={isDark ? "#60a5fa" : "#3b82f6"} 
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Snooze Settings */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Snooze
+              </Text>
+            </View>
+            
+            <View className="p-4 space-y-4">
+              <View className="flex-row items-center justify-between py-2">
+                <View className="flex-1">
+                  <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Enable Snooze
+                  </Text>
+                  <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Allow snoozing alarms
+                  </Text>
+                </View>
+                <Switch
+                  value={settings.snoozeEnabled}
+                  onValueChange={handleSnoozeToggle}
+                  trackColor={{ false: isDark ? '#374151' : '#f3f4f6', true: '#10b981' }}
+                  thumbColor={settings.snoozeEnabled ? '#ffffff' : '#9ca3af'}
+                />
+              </View>
+
+              {settings.snoozeEnabled && (
+                <View className="py-2">
+                  <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
+                    Snooze Duration
+                  </Text>
+                  <View className="flex-row gap-3">
+                    {[5, 10, 15].map((minutes) => (
+                      <TouchableOpacity
+                        key={minutes}
+                        onPress={() => handleSnoozeMinutesChange(minutes)}
+                        className={`flex-1 p-3 rounded-lg items-center mx-1 ${
+                          settings.snoozeMinutes === minutes 
+                            ? (isDark ? 'bg-blue-600' : 'bg-blue-500')
+                            : (isDark ? 'bg-gray-700' : 'bg-gray-100')
+                        }`}
+                      >
+                        <Text className={`font-medium ${
+                          settings.snoozeMinutes === minutes 
+                            ? 'text-white'
+                            : (isDark ? 'text-gray-300' : 'text-gray-700')
+                        }`}>
+                          {minutes}m
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Default Task Settings */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Default Task Settings
+              </Text>
+            </View>
+            
+            <View className="p-4 space-y-6">
+              <View>
+                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
+                  Task Type
+                </Text>
+                <View className="space-y-2">
+                  {[
+                    { key: 'math', label: 'Math Problems', description: 'Solve arithmetic questions' },
+                    { key: 'memory', label: 'Memory Game', description: 'Remember sequences' },
+                    { key: 'typing', label: 'Typing Challenge', description: 'Type given text' }
+                  ].map((task) => (
+                    <TouchableOpacity
+                      key={task.key}
+                      onPress={() => handleTaskTypeChange(task.key as Settings['defaultTaskType'])}
+                      className={`flex-row items-center justify-between p-3 rounded-lg mb-2 ${
+                        settings.defaultTaskType === task.key 
+                          ? (isDark ? 'bg-blue-900/30 border border-blue-500' : 'bg-blue-50 border border-blue-200')
+                          : (isDark ? 'bg-gray-700' : 'bg-gray-50')
+                      }`}
+                    >
+                      <View>
+                        <Text className={`font-medium ${
+                          settings.defaultTaskType === task.key 
+                            ? (isDark ? 'text-blue-400' : 'text-blue-600')
+                            : (isDark ? 'text-gray-300' : 'text-gray-700')
+                        }`}>
+                          {task.label}
+                        </Text>
+                        <Text className={`text-sm ${
+                          settings.defaultTaskType === task.key 
+                            ? (isDark ? 'text-blue-300' : 'text-blue-500')
+                            : (isDark ? 'text-gray-400' : 'text-gray-500')
+                        }`}>
+                          {task.description}
+                        </Text>
+                      </View>
+                      {settings.defaultTaskType === task.key && (
+                        <Ionicons 
+                          name="checkmark-circle" 
+                          size={20} 
+                          color={isDark ? "#60a5fa" : "#3b82f6"} 
+                        />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
+                  Difficulty Level
+                </Text>
+                <View className="flex-row gap-3">
+                  {[
+                    { key: 'easy', label: 'Easy', color: 'green' },
+                    { key: 'medium', label: 'Medium', color: 'yellow' },
+                    { key: 'hard', label: 'Hard', color: 'red' }
+                  ].map((difficulty) => (
+                    <TouchableOpacity
+                      key={difficulty.key}
+                      onPress={() => handleDifficultyChange(difficulty.key as Settings['defaultDifficulty'])}
+                      className={`flex-1 p-3 rounded-lg items-center mx-1 ${
+                        settings.defaultDifficulty === difficulty.key 
+                          ? (difficulty.color === 'green' ? (isDark ? 'bg-green-600' : 'bg-green-500') :
+                             difficulty.color === 'yellow' ? (isDark ? 'bg-yellow-600' : 'bg-yellow-500') :
+                             (isDark ? 'bg-red-600' : 'bg-red-500'))
+                          : (isDark ? 'bg-gray-700' : 'bg-gray-100')
+                      }`}
+                    >
+                      <Text className={`font-medium ${
+                        settings.defaultDifficulty === difficulty.key 
+                          ? 'text-white'
+                          : (isDark ? 'text-gray-300' : 'text-gray-700')
+                      }`}>
+                        {difficulty.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Theme Settings */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Appearance
+              </Text>
+            </View>
+            
+            <View className="p-4">
+              <TouchableOpacity 
                 onPress={handleThemeChange}
-                className={`${isDark ? 'bg-gray-700' : 'bg-gray-100'} rounded-lg px-4 py-2`}
+                className="flex-row items-center justify-between py-3"
               >
-                <Text className={`${isDark ? 'text-gray-200' : 'text-gray-700'} font-medium`}>
-                  Change
+                <View className="flex-row items-center flex-1">
+                  <Ionicons 
+                    name={isDark ? "moon" : "sunny"} 
+                    size={20} 
+                    color={isDark ? "#fbbf24" : "#f59e0b"} 
+                  />
+                  <View className="ml-3 flex-1">
+                    <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Theme
+                    </Text>
+                    <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {getThemeDisplayName(theme)}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={20} 
+                  color={isDark ? "#6b7280" : "#9ca3af"} 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Reset Settings */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4">
+              <TouchableOpacity
+                onPress={handleResetSettings}
+                className="flex-row items-center justify-center py-3"
+              >
+                <Ionicons
+                  name="refresh"
+                  size={20}
+                  color={isDark ? "#ef4444" : "#dc2626"}
+                />
+                <Text className={`ml-2 font-medium ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                  Reset All Settings
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
 
-        {/* Default Task Settings */}
-        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
-          <View className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Default Task Settings
-            </Text>
-          </View>
-          
-          <View className="p-4">
-            {/* Task Type */}
-            <View className="mb-4">
-              <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
-                Default Task Type
+          {/* App Info */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-sm`}>
+            <View className="p-4">
+              <Text className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-500'} text-sm`}>
+                Alarm Buddy v{settings.version}
               </Text>
-              <View className="flex-row flex-wrap">
-                {(['none', 'math', 'riddle'] as const).map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    onPress={() => handleTaskTypeChange(type)}
-                    className={`mr-3 mb-2 px-4 py-2 rounded-lg border ${
-                      settings.defaultTaskType === type
-                        ? (isDark ? 'bg-blue-600 border-blue-600' : 'bg-blue-500 border-blue-500')
-                        : (isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-300')
-                    }`}
-                  >
-                    <Text className={`font-medium ${
-                      settings.defaultTaskType === type
-                        ? 'text-white'
-                        : (isDark ? 'text-gray-300' : 'text-gray-700')
-                    }`}>
-                      {type === 'none' ? 'None' : type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            
-            {/* Task Difficulty */}
-            <View>
-              <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
-                Default Difficulty
+              <Text className={`text-center ${isDark ? 'text-gray-500' : 'text-gray-400'} text-xs mt-1`}>
+                Wake up with purpose
               </Text>
-              <View className="flex-row flex-wrap">
-                {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
-                  <TouchableOpacity
-                    key={difficulty}
-                    onPress={() => handleDifficultyChange(difficulty)}
-                    className={`mr-3 mb-2 px-4 py-2 rounded-lg border ${
-                      settings.defaultDifficulty === difficulty
-                        ? (isDark ? 'bg-blue-600 border-blue-600' : 'bg-blue-500 border-blue-500')
-                        : (isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-300')
-                    }`}
-                  >
-                    <Text className={`font-medium ${
-                      settings.defaultDifficulty === difficulty
-                        ? 'text-white'
-                        : (isDark ? 'text-gray-300' : 'text-gray-700')
-                    }`}>
-                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
             </View>
           </View>
         </View>
-
-        {/* Snooze Settings */}
-        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
-          <View className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Snooze Settings
-            </Text>
-          </View>
-          
-          <View className="p-4">
-            <View className="flex-row items-center justify-between mb-4">
-              <View className="flex-1">
-                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Enable Snooze
-                </Text>
-                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                  Allow snoozing alarms
-                </Text>
-              </View>
-              
-              <Switch
-                value={settings.snoozeEnabled}
-                onValueChange={handleSnoozeToggle}
-                trackColor={{ 
-                  false: isDark ? '#374151' : '#D1D5DB', 
-                  true: isDark ? '#3B82F6' : '#60A5FA' 
-                }}
-                thumbColor={settings.snoozeEnabled ? '#FFFFFF' : '#F3F4F6'}
-                disabled={isLoading}
-              />
-            </View>
-            
-            {settings.snoozeEnabled && (
-              <View>
-                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
-                  Snooze Duration: {settings.snoozeMinutes} minutes
-                </Text>
-                <Slider
-                  style={{ width: '100%', height: 40 }}
-                  minimumValue={1}
-                  maximumValue={30}
-                  step={1}
-                  value={settings.snoozeMinutes}
-                  onValueChange={handleSnoozeMinutesChange}
-                  minimumTrackTintColor={isDark ? '#3B82F6' : '#60A5FA'}
-                  maximumTrackTintColor={isDark ? '#374151' : '#D1D5DB'}
-                  thumbTintColor={isDark ? '#60A5FA' : '#3B82F6'}
-                />
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Audio Settings */}
-        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
-          <View className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Audio Settings
-            </Text>
-          </View>
-          
-          <View className="p-4">
-            {/* Sound Toggle */}
-            <View className="flex-row items-center justify-between mb-4">
-              <View className="flex-1">
-                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Sound Enabled
-                </Text>
-                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                  Play sound for alarms
-                </Text>
-              </View>
-              
-              <Switch
-                value={settings.soundEnabled}
-                onValueChange={handleSoundToggle}
-                trackColor={{ 
-                  false: isDark ? '#374151' : '#D1D5DB', 
-                  true: isDark ? '#3B82F6' : '#60A5FA' 
-                }}
-                thumbColor={settings.soundEnabled ? '#FFFFFF' : '#F3F4F6'}
-                disabled={isLoading}
-              />
-            </View>
-            
-            {/* Volume Slider */}
-            {settings.soundEnabled && (
-              <View className="mb-4">
-                <View className="flex-row items-center justify-between mb-3">
-                  <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Default Volume: {Math.round(settings.defaultVolume * 100)}%
-                  </Text>
-                  <TouchableOpacity
-                    onPress={handleTestSound}
-                    disabled={testingSound}
-                    className={`${testingSound ? 'bg-gray-400' : 'bg-blue-600'} rounded-lg px-3 py-1`}
-                  >
-                    <Text className="text-white text-sm font-medium">
-                      {testingSound ? 'Testing...' : 'Test'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <Slider
-                  style={{ width: '100%', height: 40 }}
-                  minimumValue={0.1}
-                  maximumValue={1.0}
-                  step={0.1}
-                  value={settings.defaultVolume}
-                  onValueChange={handleVolumeChange}
-                  minimumTrackTintColor={isDark ? '#3B82F6' : '#60A5FA'}
-                  maximumTrackTintColor={isDark ? '#374151' : '#D1D5DB'}
-                  thumbTintColor={isDark ? '#60A5FA' : '#3B82F6'}
-                />
-              </View>
-            )}
-            
-            {/* Vibration Toggle */}
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Vibration
-                </Text>
-                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                  Vibrate device for alarms
-                </Text>
-              </View>
-              
-              <Switch
-                value={settings.vibrationEnabled}
-                onValueChange={handleVibrationToggle}
-                trackColor={{ 
-                  false: isDark ? '#374151' : '#D1D5DB', 
-                  true: isDark ? '#3B82F6' : '#60A5FA' 
-                }}
-                thumbColor={settings.vibrationEnabled ? '#FFFFFF' : '#F3F4F6'}
-                disabled={isLoading}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Reset Settings */}
-        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
-          <View className="p-4">
-            <TouchableOpacity
-              onPress={handleResetSettings}
-              className="flex-row items-center justify-center py-2"
-            >
-              <Ionicons 
-                name="refresh" 
-                size={20} 
-                color={isDark ? '#F87171' : '#DC2626'} 
-              />
-              <Text className={`${isDark ? 'text-red-400' : 'text-red-600'} font-medium ml-2`}>
-                Reset All Settings
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* App Info */}
-        <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-sm`}>
-          <View className="p-4">
-            <Text className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-500'} text-sm`}>
-              Alarm Buddy v{settings.version}
-            </Text>
-            <Text className={`text-center ${isDark ? 'text-gray-500' : 'text-gray-400'} text-xs mt-1`}>
-              Wake up with purpose
-            </Text>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, Switch } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAlarmStore } from '../../state/alarmStore';
@@ -49,8 +50,8 @@ export default function AlarmsScreen() {
     // Sort by time, then by enabled status
     const timeA = a.time.split(':').map(Number);
     const timeB = b.time.split(':').map(Number);
-    const minutesA = timeA[0] * 60 + timeA[1];
-    const minutesB = timeB[0] * 60 + timeB[1];
+    const minutesA = (timeA[0] ?? 0) * 60 + (timeA[1] ?? 0);
+    const minutesB = (timeB[0] ?? 0) * 60 + (timeB[1] ?? 0);
     
     if (minutesA !== minutesB) {
       return minutesA - minutesB;
@@ -60,7 +61,7 @@ export default function AlarmsScreen() {
   });
 
   return (
-    <View className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       {/* Header */}
       <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
         <View className="flex-row items-center justify-between">
@@ -186,7 +187,7 @@ export default function AlarmsScreen() {
                         {alarm.vibrate && (
                           <View className="flex-row items-center mr-4 mb-2">
                             <Ionicons 
-                              name="phone-portrait" 
+                              name="phone-portrait-outline" 
                               size={16} 
                               color={isDark ? '#9CA3AF' : '#6B7280'} 
                             />
@@ -199,7 +200,7 @@ export default function AlarmsScreen() {
                         {alarm.taskType !== 'none' && (
                           <View className="flex-row items-center mr-4 mb-2">
                             <Ionicons 
-                              name="puzzle" 
+                              name="extension-puzzle" 
                               size={16} 
                               color={isDark ? '#9CA3AF' : '#6B7280'} 
                             />
@@ -261,6 +262,6 @@ export default function AlarmsScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

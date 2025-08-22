@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Settings, SettingsSchema, createDefaultSettings, migrateSettings } from '../models/settings';
-import { storageService } from '../lib/storage';
+import { storage } from '../lib/storage';
 
 interface SettingsState {
   settings: Settings;
@@ -14,9 +14,9 @@ interface SettingsState {
   toggleTheme: () => Promise<void>;
   updateDefaultTaskType: (taskType: Settings['defaultTaskType']) => Promise<void>;
   updateDefaultDifficulty: (difficulty: Settings['defaultDifficulty']) => Promise<void>;
-  updateSnoozeSettings: (enabled: boolean, minutes?: number) => Promise<void>;
-  updateSoundSettings: (enabled: boolean, volume?: number) => Promise<void>;
-  updateVibrationSettings: (enabled: boolean) => Promise<void>;
+  updateSnoozeSettings: (enabled: boolean, minutes?: 5 | 10 | 15) => Promise<void>;
+  updateSoundSettings: (enabled: boolean, volume?: number, soundName?: Settings['soundName']) => Promise<void>;
+  updateVibrationSettings: (enabled: boolean, pattern?: Settings['vibrationPattern']) => Promise<void>;
   clearError: () => void;
 }
 
@@ -28,7 +28,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSettings: async () => {
     try {
       set({ isLoading: true, error: null });
-      let settings = await storageService.getSettings();
+      let settings = await storage.getSettings();
       
       // Migrate settings if needed
       settings = migrateSettings(settings);
@@ -58,7 +58,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const validatedSettings = SettingsSchema.parse(updatedSettings);
       
       // Save to storage
-      await storageService.saveSettings(validatedSettings);
+      await storage.saveSettings(validatedSettings);
       
       // Update state
       set({ settings: validatedSettings, isLoading: false });
@@ -78,7 +78,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const defaultSettings = createDefaultSettings();
       
       // Save to storage
-      await storageService.saveSettings(defaultSettings);
+      await storage.saveSettings(defaultSettings);
       
       // Update state
       set({ settings: defaultSettings, isLoading: false });
@@ -143,11 +143,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  updateSoundSettings: async (enabled, volume) => {
+  updateSoundSettings: async (enabled, volume, soundName) => {
     try {
       const updates: Partial<Settings> = { soundEnabled: enabled };
       if (volume !== undefined) {
         updates.defaultVolume = volume;
+      }
+      if (soundName !== undefined) {
+        updates.soundName = soundName;
       }
       
       await get().updateSettings(updates);
@@ -159,9 +162,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  updateVibrationSettings: async (enabled) => {
+  updateVibrationSettings: async (enabled, pattern) => {
     try {
-      await get().updateSettings({ vibrationEnabled: enabled });
+      const updates: Partial<Settings> = { vibrationEnabled: enabled };
+      if (pattern !== undefined) {
+        updates.vibrationPattern = pattern;
+      }
+      await get().updateSettings(updates);
     } catch (error) {
       console.error('Error updating vibration settings:', error);
       set({ 
@@ -193,7 +200,7 @@ export const getDefaultTaskSettings = (): {
 
 export const getSnoozeSettings = (): {
   enabled: boolean;
-  minutes: number;
+  minutes: 5 | 10 | 15;
 } => {
   const { snoozeEnabled, snoozeMinutes } = useSettingsStore.getState().settings;
   return {
@@ -204,13 +211,17 @@ export const getSnoozeSettings = (): {
 
 export const getAudioSettings = (): {
   soundEnabled: boolean;
+  soundName: Settings['soundName'];
   vibrationEnabled: boolean;
+  vibrationPattern: Settings['vibrationPattern'];
   defaultVolume: number;
 } => {
-  const { soundEnabled, vibrationEnabled, defaultVolume } = useSettingsStore.getState().settings;
+  const { soundEnabled, soundName, vibrationEnabled, vibrationPattern, defaultVolume } = useSettingsStore.getState().settings;
   return {
     soundEnabled,
+    soundName,
     vibrationEnabled,
+    vibrationPattern,
     defaultVolume,
   };
 };

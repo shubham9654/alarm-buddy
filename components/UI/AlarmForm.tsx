@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Slider from '@react-native-community/slider';
@@ -25,12 +26,16 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
       return { ...alarm };
     }
     const defaultAlarm = createDefaultAlarm();
+    const now = Date.now();
     return {
       ...defaultAlarm,
+      id: '',
       taskType: settings.defaultTaskType,
       taskDifficulty: settings.defaultDifficulty,
       volume: settings.defaultVolume,
       vibrate: settings.vibrationEnabled,
+      createdAt: now,
+      updatedAt: now,
     };
   });
   
@@ -40,13 +45,13 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
 
   const availableSounds = soundService.getAvailableSounds();
   const daysOfWeek = [
-    { key: 'monday', label: 'Mon' },
-    { key: 'tuesday', label: 'Tue' },
-    { key: 'wednesday', label: 'Wed' },
-    { key: 'thursday', label: 'Thu' },
-    { key: 'friday', label: 'Fri' },
-    { key: 'saturday', label: 'Sat' },
-    { key: 'sunday', label: 'Sun' },
+    { key: 'mon', label: 'Mon' },
+    { key: 'tue', label: 'Tue' },
+    { key: 'wed', label: 'Wed' },
+    { key: 'thu', label: 'Thu' },
+    { key: 'fri', label: 'Fri' },
+    { key: 'sat', label: 'Sat' },
+    { key: 'sun', label: 'Sun' },
   ] as const;
 
   const validateForm = (): boolean => {
@@ -71,7 +76,7 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
     
     const updatedAlarm: Alarm = {
       ...formData,
-      updatedAt: new Date().toISOString(),
+      updatedAt: Date.now(),
     };
     
     onSave(updatedAlarm);
@@ -118,14 +123,23 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
   };
 
   const getCurrentTimeForPicker = (): Date => {
-    const [hours, minutes] = formData.time.split(':').map(Number);
+    const timeParts = formData.time.split(':').map(Number);
+    const hours = timeParts[0];
+    const minutes = timeParts[1];
     const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
+    if (hours !== undefined && minutes !== undefined) {
+      date.setHours(hours, minutes, 0, 0);
+    }
     return date;
   };
 
   const formatTime = (time: string): string => {
-    const [hours, minutes] = time.split(':');
+    const timeParts = time.split(':');
+    const hours = timeParts[0];
+    const minutes = timeParts[1];
+    if (!hours || !minutes) {
+      return '12:00 AM';
+    }
     const hour = parseInt(hours);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
@@ -133,11 +147,14 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
   };
 
   return (
-    <View className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       {/* Header */}
-      <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 py-6 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+      <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
         <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={onCancel}>
+          <TouchableOpacity 
+            onPress={onCancel}
+            className={`px-4 py-2 rounded-lg border ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-gray-50'}`}
+          >
             <Text className={`text-lg ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
               Cancel
             </Text>
@@ -147,7 +164,10 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
             {isEditing ? 'Edit Alarm' : 'New Alarm'}
           </Text>
           
-          <TouchableOpacity onPress={handleSave}>
+          <TouchableOpacity 
+            onPress={handleSave}
+            className={`px-4 py-2 rounded-lg border ${isDark ? 'border-blue-500 bg-blue-900/30' : 'border-blue-300 bg-blue-50'}`}
+          >
             <Text className={`text-lg font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
               Save
             </Text>
@@ -309,20 +329,20 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
             <View className="flex-row flex-wrap">
               {availableSounds.map((sound) => (
                 <TouchableOpacity
-                  key={sound}
-                  onPress={() => setFormData(prev => ({ ...prev, sound }))}
+                  key={sound.name}
+                  onPress={() => setFormData(prev => ({ ...prev, sound: sound.name }))}
                   className={`mr-3 mb-2 px-4 py-2 rounded-lg border ${
-                    formData.sound === sound
+                    formData.sound === sound.name
                       ? (isDark ? 'bg-blue-600 border-blue-600' : 'bg-blue-500 border-blue-500')
                       : (isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-300')
                   }`}
                 >
                   <Text className={`font-medium ${
-                    formData.sound === sound
+                    formData.sound === sound.name
                       ? 'text-white'
                       : (isDark ? 'text-gray-300' : 'text-gray-700')
                   }`}>
-                    {sound.charAt(0).toUpperCase() + sound.slice(1).replace('-', ' ')}
+                    {sound.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -384,6 +404,16 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
         </View>
       </ScrollView>
 
+      {/* Bottom Save Button */}
+      <View className={`p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        <TouchableOpacity
+          onPress={handleSave}
+          className="bg-blue-600 rounded-lg py-4 px-6 items-center justify-center"
+        >
+          <Text className="text-white text-lg font-semibold">Save Alarm</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Time Picker Modal */}
       {showTimePicker && (
         <DateTimePicker
@@ -393,6 +423,6 @@ export function AlarmForm({ alarm, onSave, onCancel }: AlarmFormProps) {
           onChange={handleTimeChange}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }

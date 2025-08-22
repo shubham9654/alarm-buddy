@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useAlarmStore } from '../state/alarmStore';
 import { useSettingsStore } from '../state/settingsStore';
 import { soundService } from '../lib/sound';
@@ -118,16 +119,17 @@ export const AppStateWrapper: React.FC<AppStateWrapperProps> = ({
     return (
       <>
         {loadingComponent || (
-          <div className="flex-1 justify-center items-center bg-white dark:bg-gray-900">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          <View className="flex-1 justify-center items-center bg-white dark:bg-gray-900">
+            <View className="text-center">
+              <Text className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Alarm Buddy
-              </div>
-              <div className="text-gray-600 dark:text-gray-400">
+              </Text>
+              <Text className="text-gray-600 dark:text-gray-400">
                 Loading...
-              </div>
-            </div>
-          </div>
+              </Text>
+              <ActivityIndicator size="large" className="mt-4" />
+            </View>
+          </View>
         )}
       </>
     );
@@ -137,22 +139,22 @@ export const AppStateWrapper: React.FC<AppStateWrapperProps> = ({
     return (
       <>
         {errorComponent ? errorComponent(error, retryInitialization) : (
-          <div className="flex-1 justify-center items-center bg-white dark:bg-gray-900 p-6">
-            <div className="text-center max-w-sm">
-              <div className="text-2xl font-bold text-red-600 dark:text-red-400 mb-4">
+          <View className="flex-1 justify-center items-center bg-white dark:bg-gray-900 p-6">
+            <View className="text-center max-w-sm">
+              <Text className="text-2xl font-bold text-red-600 dark:text-red-400 mb-4">
                 Oops!
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-6">
+              </Text>
+              <Text className="text-gray-700 dark:text-gray-300 mb-6">
                 {error}
-              </div>
-              <button
+              </Text>
+              <TouchableOpacity
                 onPress={retryInitialization}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg"
               >
-                Try Again
-              </button>
-            </div>
-          </div>
+                <Text className="text-white font-medium">Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
       </>
     );

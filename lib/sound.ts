@@ -10,10 +10,8 @@ class SoundService {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: true,
-        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
-        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
         playThroughEarpieceAndroid: false,
       });
     } catch (error) {
@@ -40,20 +38,28 @@ class SoundService {
       const { sound } = await Audio.Sound.createAsync(
         soundUri,
         {
-          shouldPlay: true,
+          shouldPlay: false,
           isLooping: true,
           volume: alarm.volume,
         }
       );
 
       this.sound = sound;
+      
+      // Wait for the sound to be loaded before playing
+      await sound.playAsync();
       this.isPlaying = true;
 
       // Set up playback status update
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded && !status.isPlaying && this.isPlaying) {
-          // If sound stopped unexpectedly, try to restart it
-          sound.playAsync().catch(console.error);
+          // If sound stopped unexpectedly and we're still supposed to be playing, restart it
+          // But only if the sound is still loaded and we haven't manually stopped it
+          if (this.sound === sound) {
+            sound.playAsync().catch((error) => {
+              console.warn('Failed to restart alarm sound:', error);
+            });
+          }
         }
       });
 
@@ -68,12 +74,25 @@ class SoundService {
 
   async stopAlarm(): Promise<void> {
     try {
+      // Always clear the playing flag so the service state doesn't remain
+      // 'playing' when there isn't an active Audio.Sound instance. This
+      // handles fallbacks where a system notification sound is used and
+      // `this.sound` is null.
+      this.isPlaying = false;
+
       if (this.sound) {
-        await this.sound.stopAsync();
-        await this.sound.unloadAsync();
+        // Remove the status update listener to prevent restart attempts
+        try {
+          this.sound.setOnPlaybackStatusUpdate(null);
+        } catch (e) {
+          // ignore
+        }
+
+        await this.sound.stopAsync().catch(() => {});
+        await this.sound.unloadAsync().catch(() => {});
         this.sound = null;
       }
-      this.isPlaying = false;
+
       console.log('Alarm sound stopped');
     } catch (error) {
       console.error('Error stopping alarm sound:', error);

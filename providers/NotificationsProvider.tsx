@@ -1,14 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 import { notificationService } from '../lib/notifications';
 import { useAlarmStore } from '../state/alarmStore';
+
+
 
 interface NotificationsContextType {
   hasPermission: boolean;
   isInitialized: boolean;
   requestPermission: () => Promise<boolean>;
   checkPermission: () => Promise<boolean>;
+  currentRingingAlarm: string | null;
+  setCurrentRingingAlarm: (alarmId: string | null) => void;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
@@ -20,6 +25,7 @@ interface NotificationsProviderProps {
 export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ children }) => {
   const [hasPermission, setHasPermission] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [currentRingingAlarm, setCurrentRingingAlarm] = useState<string | null>(null);
   const { dismissAlarm, snoozeAlarm } = useAlarmStore();
 
   useEffect(() => {
@@ -56,6 +62,8 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
           shouldShowAlert: isAlarmNotification,
           shouldPlaySound: isAlarmNotification,
           shouldSetBadge: false,
+          shouldShowBanner: isAlarmNotification,
+          shouldShowList: isAlarmNotification,
         };
       },
     });
@@ -73,10 +81,18 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
           switch (action) {
             case 'snooze':
               snoozeAlarm(alarmId, 5); // Default 5 minutes snooze
+              setCurrentRingingAlarm(null);
               break;
             case 'dismiss':
-            case Notifications.DEFAULT_ACTION_IDENTIFIER:
               dismissAlarm(alarmId);
+              setCurrentRingingAlarm(null);
+              break;
+            case Notifications.DEFAULT_ACTION_IDENTIFIER:
+              // Navigate to ring screen when notification is tapped
+              if (currentRingingAlarm !== alarmId) {
+                setCurrentRingingAlarm(alarmId);
+                router.push(`/alarm/ring?alarmId=${alarmId}`);
+              }
               break;
             default:
               console.log('Unknown notification action:', action);
@@ -90,9 +106,17 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
       (notification) => {
         const { data } = notification.request.content;
         
-        if (data?.type === 'alarm') {
+        if (data?.type === 'alarm' && data?.alarmId) {
           console.log('Alarm notification received:', notification.request.content.title);
-          // You could trigger additional actions here, like showing an in-app alarm screen
+          const alarmId = data.alarmId as string;
+          // Only navigate if we're not already showing this alarm
+          if (currentRingingAlarm !== alarmId) {
+            console.log('Navigating to ring screen for alarm:', alarmId);
+            setCurrentRingingAlarm(alarmId);
+            router.push(`/alarm/ring?alarmId=${alarmId}`);
+          } else {
+            console.log('Already showing ring screen for alarm:', alarmId);
+          }
         }
       }
     );
@@ -123,7 +147,6 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
           allowAlert: true,
           allowBadge: true,
           allowSound: true,
-          allowAnnouncements: true,
         },
         android: {
           allowAlert: true,
@@ -155,6 +178,8 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     isInitialized,
     requestPermission,
     checkPermission,
+    currentRingingAlarm,
+    setCurrentRingingAlarm,
   };
 
   return (

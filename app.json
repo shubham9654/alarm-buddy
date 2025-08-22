@@ -38,8 +38,7 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-av",
-      "react-native-reanimated/plugin"
+      "expo-av"
     ]
   }
 }

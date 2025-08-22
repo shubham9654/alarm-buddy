@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Alarm, AlarmSchema, createDefaultAlarm } from '../models/alarm';
-import { storageService } from '../lib/storage';
+import { Alarm, AlarmSchema, createDefaultAlarm, isRepeating } from '../models/alarm';
+import { storage } from '../lib/storage';
 import { notificationService } from '../lib/notifications';
 import { getNextAlarmTime } from '../lib/time';
 
@@ -31,7 +31,11 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
   loadAlarms: async () => {
     try {
       set({ isLoading: true, error: null });
-      const alarms = await storageService.getAlarms();
+      const alarms = await storage.getAlarms();
+      
+      // Reschedule notifications for all enabled alarms
+      await notificationService.reconcileAlarms(alarms);
+      
       set({ alarms, isLoading: false });
       get().refreshNextAlarm();
     } catch (error) {
@@ -47,17 +51,24 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       
+      // Generate unique ID and timestamps
+      const now = Date.now();
+      const id = `alarm_${now}_${Math.random().toString(36).substr(2, 9)}`;
+      
       // Create new alarm with default values
       const newAlarm = {
         ...createDefaultAlarm(),
         ...alarmData,
+        id,
+        createdAt: now,
+        updatedAt: now,
       };
 
       // Validate the alarm data
       const validatedAlarm = AlarmSchema.parse(newAlarm);
       
       // Save to storage
-      await storageService.addAlarm(validatedAlarm);
+      await storage.addAlarm(validatedAlarm);
       
       // Schedule notification if enabled
       if (validatedAlarm.enabled) {
@@ -91,14 +102,14 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
       const updatedAlarm = {
         ...currentAlarms[alarmIndex],
         ...updates,
-        updatedAt: new Date().toISOString(),
+        updatedAt: Date.now(),
       };
       
       // Validate the updated alarm
       const validatedAlarm = AlarmSchema.parse(updatedAlarm);
       
       // Update in storage
-      await storageService.updateAlarm(id, validatedAlarm);
+      await storage.updateAlarm(validatedAlarm);
       
       // Update notifications
       await notificationService.cancelAlarm(id);
@@ -128,7 +139,7 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
       await notificationService.cancelAlarm(id);
       
       // Delete from storage
-      await storageService.deleteAlarm(id);
+      await storage.deleteAlarm(id);
       
       // Update state
       const updatedAlarms = get().alarms.filter(alarm => alarm.id !== id);
@@ -171,7 +182,7 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
       snoozeTime.setMinutes(snoozeTime.getMinutes() + minutes);
       
       // Schedule snooze notification
-      await notificationService.scheduleSnooze(alarm, snoozeTime);
+      await notificationService.scheduleSnooze(id, snoozeTime, alarm);
       
       console.log(`Alarm snoozed for ${minutes} minutes`);
     } catch (error) {
@@ -189,9 +200,9 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
       
       // If it's a one-time alarm, disable it
       const alarm = get().alarms.find(a => a.id === id);
-      if (alarm && !alarm.repeat.enabled) {
+      if (alarm && !isRepeating(alarm.repeat)) {
         await get().updateAlarm(id, { enabled: false });
-      } else if (alarm && alarm.repeat.enabled) {
+      } else if (alarm && isRepeating(alarm.repeat)) {
         // For repeating alarms, reschedule for next occurrence
         await notificationService.scheduleAlarm(alarm);
       }

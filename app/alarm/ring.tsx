@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAlarmStore } from '../../state/alarmStore';
 import { useSettingsStore } from '../../state/settingsStore';
 import { useTheme } from '../../providers/ThemeProvider';
+import { useNotifications } from '../../providers/NotificationsProvider';
 import { soundService } from '../../lib/sound';
 import { notificationService } from '../../lib/notifications';
 import { MathTask } from '../../components/tasks/MathTask';
@@ -22,6 +23,7 @@ export default function AlarmRingScreen() {
   const { isDark } = useTheme();
   const { alarms, snoozeAlarm, dismissAlarm } = useAlarmStore();
   const { settings } = useSettingsStore();
+  const { setCurrentRingingAlarm } = useNotifications();
   
   const [alarm, setAlarm] = useState<Alarm | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -31,7 +33,6 @@ export default function AlarmRingScreen() {
   const [timeElapsed, setTimeElapsed] = useState(0);
   
   const appState = useRef(AppState.currentState);
-  const vibrationInterval = useRef<NodeJS.Timeout | null>(null);
   const timeInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Find the alarm
@@ -42,32 +43,37 @@ export default function AlarmRingScreen() {
         setAlarm(foundAlarm);
       } else {
         // Alarm not found, go back
+        setCurrentRingingAlarm(null);
         router.back();
       }
     }
   }, [params.alarmId, alarms]);
 
-  // Start alarm sound and vibration
+  // Cleanup when component unmounts
+  useEffect(() => {
+    return () => {
+      setCurrentRingingAlarm(null);
+    };
+  }, []);
+
+  // Start alarm sound and vibration (only once when alarm is found)
   useEffect(() => {
     if (!alarm) return;
 
+    console.log('🔔 Starting alarm useEffect for alarm:', alarm.id);
     const startAlarm = async () => {
       try {
+        console.log('🔔 Starting alarm sound and vibration');
         // Play sound if enabled
         if (settings.soundEnabled && alarm.sound) {
-          await soundService.playAlarm(alarm.sound, alarm.volume);
+          await soundService.playAlarm(alarm);
           setIsPlaying(true);
         }
 
         // Start vibration if enabled
         if (settings.vibrationEnabled && alarm.vibrate) {
           const vibrationPattern = [0, 1000, 500, 1000, 500, 1000];
-          Vibration.vibrate(vibrationPattern, true);
-          
-          // Set up continuous vibration
-          vibrationInterval.current = setInterval(() => {
-            Vibration.vibrate(vibrationPattern, true);
-          }, 3000);
+          Vibration.vibrate(vibrationPattern, true); // This will repeat indefinitely
         }
 
         // Start time tracking
@@ -85,14 +91,16 @@ export default function AlarmRingScreen() {
     return () => {
       stopAlarm();
     };
-  }, [alarm, settings]);
+  }, [alarm?.id, settings.soundEnabled, settings.vibrationEnabled]); // Only depend on alarm ID and relevant settings
 
   // Handle app state changes
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      console.log('📱 App state changed from', appState.current, 'to', nextAppState);
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         // App came to foreground, ensure alarm is still playing
         if (alarm && !taskCompleted) {
+          console.log('📱 App came to foreground, restarting alarm');
           restartAlarm();
         }
       }
@@ -101,25 +109,23 @@ export default function AlarmRingScreen() {
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription?.remove();
-  }, [alarm, taskCompleted]);
+  }, [alarm?.id, taskCompleted]); // Only depend on alarm ID, not the full alarm object
 
   const stopAlarm = async () => {
     try {
-      if (isPlaying) {
-        await soundService.stopAlarm();
-        setIsPlaying(false);
-      }
-      
-      if (vibrationInterval.current) {
-        clearInterval(vibrationInterval.current);
-        vibrationInterval.current = null;
-      }
+  // Always attempt to stop the sound service. The local `isPlaying` state
+  // can get out of sync with the underlying service (for example when a
+  // fallback sound or a playback-status restart happens). Calling
+  // soundService.stopAlarm() unconditionally ensures the audio is stopped.
+  await soundService.stopAlarm();
+  setIsPlaying(false);
       
       if (timeInterval.current) {
         clearInterval(timeInterval.current);
         timeInterval.current = null;
       }
       
+      // Cancel all vibrations
       Vibration.cancel();
     } catch (error) {
       console.error('Failed to stop alarm:', error);
@@ -129,11 +135,12 @@ export default function AlarmRingScreen() {
   const restartAlarm = async () => {
     if (!alarm) return;
     
+    console.log('🔄 Restarting alarm for:', alarm.id);
     try {
       await stopAlarm();
       
       if (settings.soundEnabled && alarm.sound) {
-        await soundService.playAlarm(alarm.sound, alarm.volume);
+        await soundService.playAlarm(alarm);
         setIsPlaying(true);
       }
       
@@ -151,16 +158,18 @@ export default function AlarmRingScreen() {
 
     try {
       await stopAlarm();
-      await snoozeAlarm(alarm.id);
+      await snoozeAlarm(alarm.id, settings.snoozeMinutes);
       
       // Schedule snooze notification
-      await notificationService.scheduleSnoozeNotification(
+      const snoozeTime = new Date(Date.now() + settings.snoozeMinutes * 60 * 1000);
+      await notificationService.scheduleSnooze(
         alarm.id,
-        alarm.label || 'Alarm',
-        settings.snoozeMinutes
+        snoozeTime,
+        alarm
       );
       
       setSnoozeCount(prev => prev + 1);
+      setCurrentRingingAlarm(null);
       router.back();
     } catch (error) {
       console.error('Failed to snooze alarm:', error);
@@ -171,15 +180,21 @@ export default function AlarmRingScreen() {
   const handleDismiss = async () => {
     if (!alarm) return;
 
+    console.log('❌ Dismissing alarm:', alarm.id);
+    
     // Check if task is required
     if (alarm.taskType && alarm.taskType !== 'none' && !taskCompleted) {
+      console.log('❌ Task required, showing task screen');
       setShowTask(true);
       return;
     }
 
     try {
+      console.log('❌ Stopping alarm and dismissing');
       await stopAlarm();
       await dismissAlarm(alarm.id);
+      console.log('❌ Navigating back');
+      setCurrentRingingAlarm(null);
       router.back();
     } catch (error) {
       console.error('Failed to dismiss alarm:', error);

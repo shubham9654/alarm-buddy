@@ -7,7 +7,13 @@ export const getNextAlarmTime = (alarm: Alarm): Date | null => {
   if (!alarm.enabled) return null;
 
   const now = new Date();
-  const [hours, minutes] = alarm.time.split(':').map(Number);
+  const timeParts = alarm.time.split(':').map(Number);
+  const hours = timeParts[0];
+  const minutes = timeParts[1];
+  
+  if (hours === undefined || minutes === undefined) {
+    return null;
+  }
   
   // Check if it's a one-time alarm (no repeat days selected)
   const hasRepeatDays = Object.values(alarm.repeat).some(day => day);
@@ -32,7 +38,7 @@ export const getNextAlarmTime = (alarm: Alarm): Date | null => {
   
   // Check if alarm should trigger today
   const todayKey = daysOfWeek[currentDay];
-  if (alarm.repeat[todayKey]) {
+  if (todayKey && alarm.repeat[todayKey]) {
     const today = new Date();
     today.setHours(hours, minutes, 0, 0);
     
@@ -46,7 +52,7 @@ export const getNextAlarmTime = (alarm: Alarm): Date | null => {
     const nextDay = (currentDay + i) % 7;
     const nextDayKey = daysOfWeek[nextDay];
     
-    if (alarm.repeat[nextDayKey]) {
+    if (nextDayKey && alarm.repeat[nextDayKey]) {
       const nextDate = new Date(now);
       nextDate.setDate(now.getDate() + i);
       nextDate.setHours(hours, minutes, 0, 0);
@@ -65,7 +71,13 @@ export const getUpcomingAlarmTimes = (alarm: Alarm): Date[] => {
   
   const times: Date[] = [];
   const now = new Date();
-  const [hours, minutes] = alarm.time.split(':').map(Number);
+  const timeParts = alarm.time.split(':').map(Number);
+  const hours = timeParts[0];
+  const minutes = timeParts[1];
+  
+  if (hours === undefined || minutes === undefined) {
+    return [];
+  }
   
   const hasRepeatDays = Object.values(alarm.repeat).some(day => day);
   
@@ -88,7 +100,7 @@ export const getUpcomingAlarmTimes = (alarm: Alarm): Date[] => {
     
     const dayKey = daysOfWeek[date.getDay()];
     
-    if (alarm.repeat[dayKey] && date > now) {
+    if (dayKey && alarm.repeat[dayKey] && date > now) {
       times.push(date);
     }
   }
@@ -100,7 +112,14 @@ export const getUpcomingAlarmTimes = (alarm: Alarm): Date[] => {
  * Format time for display
  */
 export const formatTime = (time: string): string => {
-  const [hours, minutes] = time.split(':').map(Number);
+  const timeParts = time.split(':').map(Number);
+  const hours = timeParts[0];
+  const minutes = timeParts[1];
+  
+  if (hours === undefined || minutes === undefined) {
+    return '12:00 AM';
+  }
+  
   const date = new Date();
   date.setHours(hours, minutes);
   
@@ -164,7 +183,15 @@ export const isValidTime = (time: string): boolean => {
  */
 export const convertTo24Hour = (time12h: string): string => {
   const [time, modifier] = time12h.split(' ');
-  let [hours, minutes] = time.split(':').map(Number);
+  if (!time) return '00:00';
+  
+  const timeParts = time.split(':').map(Number);
+  let hours = timeParts[0];
+  let minutes = timeParts[1];
+  
+  if (hours === undefined || minutes === undefined) {
+    return '00:00';
+  }
   
   if (hours === 12) {
     hours = 0;
@@ -190,4 +217,41 @@ export const getNotificationId = (alarmId: string, dayIndex?: number): string =>
 export const calculateSnoozeTime = (snoozeMinutes: number): Date => {
   const now = new Date();
   return new Date(now.getTime() + snoozeMinutes * 60 * 1000);
+};
+
+/**
+ * Get human-readable text for repeat pattern
+ */
+export const getRepeatText = (repeat: Repeat): string => {
+  const days = {
+    mon: 'Mon',
+    tue: 'Tue', 
+    wed: 'Wed',
+    thu: 'Thu',
+    fri: 'Fri',
+    sat: 'Sat',
+    sun: 'Sun'
+  };
+  
+  const selectedDays = Object.entries(repeat)
+    .filter(([_, isSelected]) => isSelected)
+    .map(([day, _]) => days[day as keyof typeof days]);
+  
+  if (selectedDays.length === 0) {
+    return 'Once';
+  }
+  
+  if (selectedDays.length === 7) {
+    return 'Every day';
+  }
+  
+  if (selectedDays.length === 5 && !repeat.sat && !repeat.sun) {
+    return 'Weekdays';
+  }
+  
+  if (selectedDays.length === 2 && repeat.sat && repeat.sun) {
+    return 'Weekends';
+  }
+  
+  return selectedDays.join(', ');
 };
