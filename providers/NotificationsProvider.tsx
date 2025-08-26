@@ -4,6 +4,8 @@ import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { notificationService } from '../lib/notifications';
 import { useAlarmStore } from '../state/alarmStore';
+import { useSettingsStore } from '../state/settingsStore';
+import { alarmService } from '../lib/alarmService';
 
 
 
@@ -26,10 +28,18 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
   const [hasPermission, setHasPermission] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentRingingAlarm, setCurrentRingingAlarm] = useState<string | null>(null);
-  const { dismissAlarm, snoozeAlarm } = useAlarmStore();
+  const { dismissAlarm, snoozeAlarm, alarms } = useAlarmStore();
+  const { settings } = useSettingsStore();
 
   useEffect(() => {
     initializeNotifications();
+    
+    // Initialize alarm service for background operation
+    alarmService.initialize().then(() => {
+      console.log('Alarm service initialized successfully');
+    }).catch((error: any) => {
+      console.error('Failed to initialize alarm service:', error);
+    });
   }, []);
 
   const initializeNotifications = async () => {
@@ -80,7 +90,15 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
           
           switch (action) {
             case 'snooze':
-              snoozeAlarm(alarmId, 5); // Default 5 minutes snooze
+              if (settings.snoozeEnabled) {
+                const alarm = alarms.find(a => a.id === alarmId);
+                if (alarm) {
+                  snoozeAlarm(alarmId, settings.snoozeMinutes);
+                  // Schedule the snooze notification
+                  const snoozeTime = new Date(Date.now() + settings.snoozeMinutes * 60 * 1000);
+                  notificationService.scheduleSnooze(alarmId, snoozeTime, alarm);
+                }
+              }
               setCurrentRingingAlarm(null);
               break;
             case 'dismiss':

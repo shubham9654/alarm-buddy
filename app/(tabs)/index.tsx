@@ -44,7 +44,7 @@ export default function HomeScreen() {
     <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <ScrollView 
         className="flex-1"
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
       >
       {/* Header */}
       <View className="mb-6">

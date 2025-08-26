@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../../state/settingsStore';
@@ -7,6 +7,8 @@ import { useTheme } from '../../providers/ThemeProvider';
 import { useNotifications } from '../../providers/NotificationsProvider';
 import { soundService } from '../../lib/sound';
 import { Settings } from '../../models/settings';
+import BatteryOptimizationGuide from '../../components/UI/BatteryOptimizationGuide';
+import { alarmService } from '../../lib/alarmService';
 
 export default function SettingsScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
@@ -21,6 +23,32 @@ export default function SettingsScreen() {
     isLoading 
   } = useSettingsStore();
   const [testingSound, setTestingSound] = useState(false);
+  const [showBatteryGuide, setShowBatteryGuide] = useState(false);
+  const [isBatteryOptimized, setIsBatteryOptimized] = useState(true);
+
+  useEffect(() => {
+    checkBatteryOptimization();
+  }, []);
+
+  const checkBatteryOptimization = async () => {
+    try {
+      const isOptimized = await alarmService.checkBatteryOptimization();
+      setIsBatteryOptimized(isOptimized);
+    } catch (error) {
+      console.error('Failed to check battery optimization:', error);
+    }
+  };
+
+  const handleBatteryOptimizationRequest = async () => {
+    try {
+      await alarmService.requestBatteryOptimizationExemption();
+      // Recheck status after request
+      await checkBatteryOptimization();
+    } catch (error) {
+      console.error('Failed to request battery optimization exemption:', error);
+      Alert.alert('Error', 'Failed to open battery optimization settings');
+    }
+  };
 
   const handleThemeChange = async () => {
     await toggleTheme();
@@ -152,6 +180,80 @@ export default function SettingsScreen() {
                     </Text>
                     <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                       {hasPermission ? 'Enabled' : 'Tap to enable'}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={20} 
+                  color={isDark ? "#6b7280" : "#9ca3af"} 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Battery Optimization Section */}
+          <View className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl mb-6 shadow-sm`}>
+            <View className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Battery & Performance
+              </Text>
+            </View>
+            
+            <View className="p-4 space-y-4">
+              <View className="py-2">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Battery Optimization Status
+                  </Text>
+                  <View className={`px-3 py-1 rounded-full ${
+                    isBatteryOptimized 
+                      ? 'bg-red-100 border border-red-200' 
+                      : 'bg-green-100 border border-green-200'
+                  }`}>
+                    <Text className={`text-xs font-medium ${
+                      isBatteryOptimized ? 'text-red-800' : 'text-green-800'
+                    }`}>
+                      {isBatteryOptimized ? 'Enabled' : 'Disabled'}
+                    </Text>
+                  </View>
+                </View>
+                
+                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-3`}>
+                  {isBatteryOptimized 
+                    ? 'Battery optimization may prevent alarms from working reliably' 
+                    : 'Battery optimization is disabled - alarms should work reliably'
+                  }
+                </Text>
+                
+                {isBatteryOptimized && (
+                  <TouchableOpacity
+                    onPress={handleBatteryOptimizationRequest}
+                    className="bg-blue-500 px-4 py-2 rounded-lg mb-3"
+                  >
+                    <Text className="text-white font-medium text-center">
+                      Disable Battery Optimization
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              <TouchableOpacity 
+                onPress={() => setShowBatteryGuide(true)}
+                className="flex-row items-center justify-between py-3"
+              >
+                <View className="flex-row items-center flex-1">
+                  <Ionicons 
+                    name="battery-charging" 
+                    size={20} 
+                    color={isDark ? "#10b981" : "#059669"} 
+                  />
+                  <View className="ml-3 flex-1">
+                    <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Battery Optimization Guide
+                    </Text>
+                    <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Learn how to ensure your alarms work reliably
                     </Text>
                   </View>
                 </View>
@@ -576,6 +678,16 @@ export default function SettingsScreen() {
           </View>
         </View>
       </ScrollView>
+      
+      {/* Battery Optimization Guide Modal */}
+      <Modal
+        visible={showBatteryGuide}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowBatteryGuide(false)}
+      >
+        <BatteryOptimizationGuide onClose={() => setShowBatteryGuide(false)} />
+      </Modal>
     </SafeAreaView>
   );
 }

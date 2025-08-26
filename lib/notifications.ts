@@ -44,8 +44,35 @@ class NotificationService {
           lightColor: '#FF231F7C',
           sound: 'default',
           enableVibrate: true,
+          bypassDnd: true,
+          showBadge: true,
+          enableLights: true,
         });
       }
+
+      // Set up notification categories with action buttons
+      await Notifications.setNotificationCategoryAsync(
+        'alarm',
+        [
+          {
+            identifier: 'dismiss',
+            buttonTitle: 'Dismiss',
+            options: {
+              opensAppToForeground: false,
+            },
+          },
+          {
+            identifier: 'snooze',
+            buttonTitle: 'Snooze',
+            options: {
+              opensAppToForeground: false,
+            },
+          },
+        ],
+        {
+          customDismissAction: true,
+        }
+      );
 
       return true;
     } catch (error) {
@@ -74,25 +101,28 @@ class NotificationService {
         const notificationId = getNotificationId(alarm.id, index);
         
         await Notifications.scheduleNotificationAsync({
-          identifier: notificationId,
-          content: {
-            title: 'Alarm',
-            body: alarm.label || 'Time to wake up!',
-            sound: alarm.sound === 'default' ? 'default' : alarm.sound,
-            priority: Notifications.AndroidNotificationPriority.MAX,
-            sticky: true,
-            data: {
-              type: 'alarm',
-              alarmId: alarm.id,
-              taskType: alarm.taskType,
-              taskDifficulty: alarm.taskDifficulty,
-            },
+        identifier: notificationId,
+        content: {
+          title: 'Alarm',
+          body: alarm.label || 'Time to wake up!',
+          sound: alarm.sound === 'default' ? 'default' : alarm.sound,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          sticky: true,
+          autoDismiss: false,
+          categoryIdentifier: 'alarm',
+          data: {
+            type: 'alarm',
+            alarmId: alarm.id,
+            taskType: alarm.taskType,
+            taskDifficulty: alarm.taskDifficulty,
           },
-          trigger: {
-            type: SchedulableTriggerInputTypes.DATE,
-            date: alarmTime,
-          },
-        });
+        },
+        trigger: {
+          type: SchedulableTriggerInputTypes.DATE,
+          date: alarmTime,
+          channelId: 'alarms',
+        },
+      });
       }
 
       console.log(`Scheduled ${upcomingTimes.length} notifications for alarm: ${alarm.label}`);
@@ -138,7 +168,9 @@ class NotificationService {
           sound: alarm.sound === 'default' ? 'default' : alarm.sound,
           priority: Notifications.AndroidNotificationPriority.MAX,
           sticky: true,
+          categoryIdentifier: 'alarm',
           data: {
+            type: 'alarm',
             alarmId: alarm.id,
             taskType: alarm.taskType,
             taskDifficulty: alarm.taskDifficulty,
@@ -148,6 +180,7 @@ class NotificationService {
         trigger: {
           type: SchedulableTriggerInputTypes.DATE,
           date: snoozeTime,
+          channelId: 'alarms',
         },
       });
 
@@ -216,6 +249,36 @@ class NotificationService {
     listener: (response: Notifications.NotificationResponse) => void
   ) {
     return Notifications.addNotificationResponseReceivedListener(listener);
+  }
+
+  async handleNotificationAction(
+    actionIdentifier: string,
+    alarmId: string,
+    alarm: Alarm
+  ): Promise<void> {
+    try {
+      if (actionIdentifier === 'dismiss') {
+        // Cancel any remaining notifications for this alarm
+        await this.cancelAlarm(alarmId);
+        console.log(`Alarm ${alarmId} dismissed via notification action`);
+      } else if (actionIdentifier === 'snooze') {
+        // Cancel current notifications and schedule snooze
+        await this.cancelAlarm(alarmId);
+        const snoozeTime = new Date(Date.now() + 10 * 60 * 1000); // Default 10 minutes
+        await this.scheduleSnooze(alarmId, snoozeTime, alarm);
+        console.log(`Alarm ${alarmId} snoozed via notification action`);
+      }
+    } catch (error) {
+      console.error('Error handling notification action:', error);
+    }
+  }
+
+  async dismissNotification(notificationId: string): Promise<void> {
+    try {
+      await Notifications.dismissNotificationAsync(notificationId);
+    } catch (error) {
+      console.error('Error dismissing notification:', error);
+    }
   }
 }
 

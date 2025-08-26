@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Alert, Vibration, AppState, AppStateStatus } from 'react-native';
+import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAlarmStore } from '../../state/alarmStore';
@@ -29,6 +30,7 @@ export default function AlarmRingScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showTask, setShowTask] = useState(false);
   const [taskCompleted, setTaskCompleted] = useState(false);
+  const [isSnoozed, setIsSnoozed] = useState(false);
   const [snoozeCount, setSnoozeCount] = useState(0);
   const [timeElapsed, setTimeElapsed] = useState(0);
   
@@ -63,16 +65,20 @@ export default function AlarmRingScreen() {
     console.log('🔔 Starting alarm useEffect for alarm:', alarm.id);
     const startAlarm = async () => {
       try {
-        console.log('🔔 Starting alarm sound and vibration');
-        // Play sound if enabled
+        console.log('🔔 Starting persistent alarm sound and vibration');
+        
+        // Prevent device from sleeping during alarm
+        activateKeepAwake();
+        
+        // Play sound if enabled - use persistent playback
         if (settings.soundEnabled && alarm.sound) {
-          await soundService.playAlarm(alarm);
+          await soundService.playPersistentAlarm(alarm);
           setIsPlaying(true);
         }
 
-        // Start vibration if enabled
+        // Start vibration if enabled - more aggressive pattern
         if (settings.vibrationEnabled && alarm.vibrate) {
-          const vibrationPattern = [0, 1000, 500, 1000, 500, 1000];
+          const vibrationPattern = [0, 1000, 200, 1000, 200, 1000, 200, 1000];
           Vibration.vibrate(vibrationPattern, true); // This will repeat indefinitely
         }
 
@@ -90,6 +96,7 @@ export default function AlarmRingScreen() {
 
     return () => {
       stopAlarm();
+      deactivateKeepAwake();
     };
   }, [alarm?.id, settings.soundEnabled, settings.vibrationEnabled]); // Only depend on alarm ID and relevant settings
 
@@ -99,7 +106,7 @@ export default function AlarmRingScreen() {
       console.log('📱 App state changed from', appState.current, 'to', nextAppState);
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         // App came to foreground, ensure alarm is still playing
-        if (alarm && !taskCompleted) {
+        if (alarm && !taskCompleted && !isSnoozed) {
           console.log('📱 App came to foreground, restarting alarm');
           restartAlarm();
         }
@@ -109,7 +116,7 @@ export default function AlarmRingScreen() {
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription?.remove();
-  }, [alarm?.id, taskCompleted]); // Only depend on alarm ID, not the full alarm object
+  }, [alarm?.id, taskCompleted, isSnoozed]); // Only depend on alarm ID, not the full alarm object
 
   const stopAlarm = async () => {
     try {
@@ -127,6 +134,9 @@ export default function AlarmRingScreen() {
       
       // Cancel all vibrations
       Vibration.cancel();
+      
+      // Deactivate keep awake
+      deactivateKeepAwake();
     } catch (error) {
       console.error('Failed to stop alarm:', error);
     }
@@ -140,12 +150,12 @@ export default function AlarmRingScreen() {
       await stopAlarm();
       
       if (settings.soundEnabled && alarm.sound) {
-        await soundService.playAlarm(alarm);
+        await soundService.playPersistentAlarm(alarm);
         setIsPlaying(true);
       }
       
       if (settings.vibrationEnabled && alarm.vibrate) {
-        const vibrationPattern = [0, 1000, 500, 1000, 500, 1000];
+        const vibrationPattern = [0, 1000, 200, 1000, 200, 1000, 200, 1000];
         Vibration.vibrate(vibrationPattern, true);
       }
     } catch (error) {
@@ -158,6 +168,7 @@ export default function AlarmRingScreen() {
 
     try {
       await stopAlarm();
+      setIsSnoozed(true);
       await snoozeAlarm(alarm.id, settings.snoozeMinutes);
       
       // Schedule snooze notification
@@ -202,8 +213,10 @@ export default function AlarmRingScreen() {
     }
   };
 
-  const handleTaskComplete = (result: TaskResult) => {
+  const handleTaskComplete = async (result: TaskResult) => {
     if (result.completed) {
+      // Stop alarm immediately when task is completed successfully
+      await stopAlarm();
       setTaskCompleted(true);
       setShowTask(false);
       // Auto-dismiss after task completion
@@ -211,6 +224,9 @@ export default function AlarmRingScreen() {
         handleDismiss();
       }, 1000);
     } else {
+      // Task failed - hide task screen and restart alarm
+      setShowTask(false);
+      await restartAlarm();
       Alert.alert(
         'Incorrect Answer',
         'Please try again to dismiss the alarm.',

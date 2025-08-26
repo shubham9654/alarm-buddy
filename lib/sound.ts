@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { Alarm } from '../models/alarm';
 
 class SoundService {
@@ -11,9 +11,12 @@ class SoundService {
         allowsRecordingIOS: false,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
+        shouldDuckAndroid: false, // Don't duck for alarms
         playThroughEarpieceAndroid: false,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
+      console.log('Audio mode configured for alarm playback');
     } catch (error) {
       console.error('Error initializing audio:', error);
     }
@@ -40,9 +43,18 @@ class SoundService {
         {
           shouldPlay: false,
           isLooping: true,
-          volume: alarm.volume,
+          volume: Math.max(0.7, alarm.volume), // Ensure minimum volume for alarms
         }
       );
+
+      // Set additional audio properties for alarm playback
+      await sound.setStatusAsync({
+        shouldPlay: false,
+        isLooping: true,
+        volume: Math.max(0.7, alarm.volume),
+        rate: 1.0,
+        shouldCorrectPitch: true,
+      });
 
       this.sound = sound;
       
@@ -145,8 +157,8 @@ class SoundService {
       const defaultSounds = {
         default: require('../assets/sounds/default-alarm.mp3'),
         gentle: require('../assets/sounds/gentle-alarm.mp3'),
-        loud: require('../assets/sounds/loud-alarm.mp3'),
-        beep: require('../assets/sounds/beep-alarm.mp3'),
+        nature: require('../assets/sounds/nature-alarm.mp3'),
+        electronic: require('../assets/sounds/electronic-alarm.mp3'),
       };
       
       return defaultSounds[soundName as keyof typeof defaultSounds] || defaultSounds.default;
@@ -160,7 +172,7 @@ class SoundService {
   async preloadSounds(): Promise<void> {
     try {
       // Preload default sounds for better performance
-      const soundNames = ['default', 'gentle', 'loud', 'beep'];
+      const soundNames = ['default', 'gentle', 'nature', 'electronic'];
       
       for (const soundName of soundNames) {
         try {
@@ -210,9 +222,75 @@ class SoundService {
     return [
       { name: 'default', label: 'Default' },
       { name: 'gentle', label: 'Gentle' },
-      { name: 'loud', label: 'Loud' },
-      { name: 'beep', label: 'Beep' },
+      { name: 'nature', label: 'Nature' },
+      { name: 'electronic', label: 'Electronic' },
     ];
+  }
+
+  async playPersistentAlarm(alarm: Alarm): Promise<void> {
+    try {
+      // Stop any currently playing sound
+      await this.stopAlarm();
+
+      // Configure audio mode for persistent playback
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
+
+      // Load and play the alarm sound
+      const soundUri = this.getSoundUri(alarm.sound);
+      
+      if (soundUri === null) {
+        console.log('Using system notification sound for persistent alarm');
+        this.isPlaying = true;
+        return;
+      }
+
+      const { sound } = await Audio.Sound.createAsync(
+        soundUri,
+        {
+          shouldPlay: false,
+          isLooping: true,
+          volume: Math.max(0.8, alarm.volume), // Higher minimum volume for persistent alarms
+        }
+      );
+
+      this.sound = sound;
+      
+      // Start playing immediately
+      await sound.playAsync();
+      this.isPlaying = true;
+
+      // Set up aggressive playback status monitoring for persistence
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && !status.isPlaying && this.isPlaying) {
+          // Immediately restart if sound stops unexpectedly
+          if (this.sound === sound) {
+            setTimeout(() => {
+              sound.playAsync().catch((error) => {
+                console.warn('Failed to restart persistent alarm sound:', error);
+                // Try to reload and play again
+                this.playPersistentAlarm(alarm).catch(() => {
+                  console.error('Failed to reload persistent alarm');
+                });
+              });
+            }, 100); // Very short delay before restart
+          }
+        }
+      });
+
+      console.log('Persistent alarm sound started playing');
+    } catch (error) {
+      console.error('Error playing persistent alarm sound:', error);
+      // Fallback to regular alarm playback
+      await this.playAlarm(alarm);
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Alarm, AlarmSchema, createDefaultAlarm, isRepeating } from '../models/alarm';
 import { storage } from '../lib/storage';
-import { notificationService } from '../lib/notifications';
+import { alarmService } from '../lib/alarmService';
 import { getNextAlarmTime } from '../lib/time';
 
 interface AlarmState {
@@ -33,8 +33,14 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
       set({ isLoading: true, error: null });
       const alarms = await storage.getAlarms();
       
-      // Reschedule notifications for all enabled alarms
-      await notificationService.reconcileAlarms(alarms);
+      // Reschedule alarms for all enabled alarms
+      for (const alarm of alarms.filter(a => a.enabled)) {
+        try {
+          await alarmService.scheduleAlarm(alarm);
+        } catch (error) {
+          console.error(`Failed to reschedule alarm ${alarm.id}:`, error);
+        }
+      }
       
       set({ alarms, isLoading: false });
       get().refreshNextAlarm();
@@ -70,9 +76,15 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
       // Save to storage
       await storage.addAlarm(validatedAlarm);
       
-      // Schedule notification if enabled
+      // Schedule alarm using react-native-alarm-notification
       if (validatedAlarm.enabled) {
-        await notificationService.scheduleAlarm(validatedAlarm);
+        try {
+          await alarmService.scheduleAlarm(validatedAlarm);
+          console.log('Alarm scheduled successfully');
+        } catch (error) {
+          console.error('Failed to schedule alarm:', error);
+          throw error;
+        }
       }
       
       // Update state
@@ -111,10 +123,24 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
       // Update in storage
       await storage.updateAlarm(validatedAlarm);
       
-      // Update notifications
-      await notificationService.cancelAlarm(id);
+      // Cancel existing alarm
+      const existingAlarm = currentAlarms[alarmIndex];
+      if (existingAlarm) {
+        try {
+          await alarmService.cancelAlarm(existingAlarm.id);
+        } catch (error) {
+          console.error('Failed to cancel existing alarm:', error);
+        }
+      }
+      
+      // Schedule new alarm if enabled
       if (validatedAlarm.enabled) {
-        await notificationService.scheduleAlarm(validatedAlarm);
+        try {
+          await alarmService.scheduleAlarm(validatedAlarm);
+          console.log('Updated alarm scheduled successfully');
+        } catch (error) {
+          console.error('Failed to schedule updated alarm:', error);
+        }
       }
       
       // Update state
@@ -135,8 +161,12 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       
-      // Cancel notification
-      await notificationService.cancelAlarm(id);
+      // Cancel alarm
+      try {
+        await alarmService.cancelAlarm(id);
+      } catch (error) {
+        console.error('Failed to cancel alarm:', error);
+      }
       
       // Delete from storage
       await storage.deleteAlarm(id);
@@ -156,16 +186,46 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
 
   toggleAlarm: async (id) => {
     try {
+      set({ isLoading: true, error: null });
+      
       const alarm = get().alarms.find(a => a.id === id);
       if (!alarm) {
         throw new Error('Alarm not found');
       }
       
-      await get().updateAlarm(id, { enabled: !alarm.enabled });
+      const updatedAlarm = { ...alarm, enabled: !alarm.enabled };
+      
+      // Update storage
+      await storage.updateAlarm(updatedAlarm);
+      
+      // Cancel existing alarm
+      try {
+        await alarmService.cancelAlarm(alarm.id);
+      } catch (error) {
+        console.error('Failed to cancel existing alarm:', error);
+      }
+      
+      // Schedule alarm if now enabled
+      if (updatedAlarm.enabled) {
+        try {
+          await alarmService.scheduleAlarm(updatedAlarm);
+          console.log('Toggled alarm scheduled successfully');
+        } catch (error) {
+          console.error('Failed to schedule toggled alarm:', error);
+        }
+      }
+      
+      // Update state
+      const updatedAlarms = get().alarms.map(a => 
+        a.id === id ? updatedAlarm : a
+      );
+      set({ alarms: updatedAlarms, isLoading: false });
+      get().refreshNextAlarm();
     } catch (error) {
       console.error('Error toggling alarm:', error);
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to toggle alarm'
+        error: error instanceof Error ? error.message : 'Failed to toggle alarm',
+        isLoading: false 
       });
     }
   },
@@ -177,12 +237,8 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
         throw new Error('Alarm not found');
       }
       
-      // Calculate snooze time
-      const snoozeTime = new Date();
-      snoozeTime.setMinutes(snoozeTime.getMinutes() + minutes);
-      
-      // Schedule snooze notification
-      await notificationService.scheduleSnooze(id, snoozeTime, alarm);
+      // Use the new snoozeAlarm method from alarmService
+      await alarmService.snoozeAlarm(id, minutes);
       
       console.log(`Alarm snoozed for ${minutes} minutes`);
     } catch (error) {
@@ -196,7 +252,7 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
   dismissAlarm: async (id) => {
     try {
       // Cancel any pending notifications for this alarm
-      await notificationService.cancelAlarm(id);
+      await alarmService.cancelAlarm(id);
       
       // If it's a one-time alarm, disable it
       const alarm = get().alarms.find(a => a.id === id);
@@ -204,7 +260,7 @@ export const useAlarmStore = create<AlarmState>((set, get) => ({
         await get().updateAlarm(id, { enabled: false });
       } else if (alarm && isRepeating(alarm.repeat)) {
         // For repeating alarms, reschedule for next occurrence
-        await notificationService.scheduleAlarm(alarm);
+        await alarmService.scheduleAlarm(alarm);
       }
       
       console.log('Alarm dismissed');

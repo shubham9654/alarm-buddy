@@ -93,3 +93,15 @@ npx tsc --noEmit   # Type checking
 ---
 
 **Made with ❤️ using React Native and Expo**
+
+### Note about `userInterfaceStyle`
+
+If you want to enable `userInterfaceStyle` in `app.json` (for automatic dark/light theming), install `expo-system-ui` and then re-add the key:
+
+PowerShell:
+
+```powershell
+npx expo install expo-system-ui
+```
+
+After installing, you can set `"userInterfaceStyle": "automatic"` back in `app.json` and re-run `npx expo prebuild`.
